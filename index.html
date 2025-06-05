@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Visor 3D GLB</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    html, body, #renderCanvas {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #ffffff;
+    }
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.5s ease-out;
+    }
+    #loadingContainer {
+      position: relative;
+      width: clamp(60px, 15vw, 80px);
+      height: clamp(60px, 15vw, 80px);
+    }
+    #orbitingBall {
+      position: absolute;
+      width: clamp(12px, 3vw, 16px);
+      height: clamp(12px, 3vw, 16px);
+      background-color: #f97316;
+      border-radius: 50%;
+      animation: orbit 2s linear infinite;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #audioControl {
+      position: fixed;
+      bottom: max(20px, env(safe-area-inset-bottom, 20px));
+      right: max(20px, env(safe-area-inset-right, 20px));
+      width: clamp(40px, 12vw, 50px);
+      height: clamp(40px, 12vw, 50px);
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 2px solid #f97316;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+      transition: all 0.3s ease;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #audioControl:hover {
+      background-color: #f97316;
+    }
+    #audioControl i {
+      font-size: 18px;
+      color: #f97316;
+      transition: color 0.3s ease;
+    }
+    #audioControl:hover i {
+      color: white;
+    }
+    @keyframes orbit {
+      from {
+        transform: rotate(0deg) translateX(clamp(25px, 6vw, 30px)) translate(-50%, -50%);
+      }
+      to {
+        transform: rotate(360deg) translateX(clamp(25px, 6vw, 30px)) translate(-50%, -50%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="loadingOverlay">
+    <div id="loadingContainer">
+      <div id="orbitingBall"></div>
+    </div>
+  </div>
+
+  <!-- Audio control button -->
+  <button id="audioControl">
+    <i class="fas fa-volume-mute"></i>
+  </button>
+
+  <!-- Audio element -->
+  <audio id="bgAudio" loop>
+    <source src="WhatsApp Audio 2025-06-05 at 4.54.59 PM.mpeg" type="audio/mpeg">
+  </audio>
+
+  <canvas id="renderCanvas"></canvas>
+
+  <script>
+    // Audio control functionality
+    const audioControl = document.getElementById('audioControl');
+    const audioIcon = audioControl.querySelector('i');
+    const bgAudio = document.getElementById('bgAudio');
+    
+    audioControl.addEventListener('click', function() {
+      if (bgAudio.paused) {
+        bgAudio.play();
+        audioIcon.classList.remove('fa-volume-mute');
+        audioIcon.classList.add('fa-volume-up');
+      } else {
+        bgAudio.pause();
+        audioIcon.classList.remove('fa-volume-up');
+        audioIcon.classList.add('fa-volume-mute');
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', function () {
+      const canvas = document.getElementById('renderCanvas');
+      const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+      const loadingOverlay = document.getElementById('loadingOverlay');
+
+      const createScene = function () {
+        const scene = new BABYLON.Scene(engine);
+        scene.clearColor = new BABYLON.Color4(1, 0.9, 0.8, 1);
+
+        const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 4, Math.PI / 4, 30, BABYLON.Vector3.Zero(), scene);
+        camera.attachControl(canvas, true, true); // Enable touch controls
+        camera.wheelDeltaPercentage = 0.01;
+        camera.pinchDeltaPercentage = 0.015; // Reduced pinch sensitivity
+        camera.lowerRadiusLimit = 10;
+        camera.upperRadiusLimit = 100;
+        camera.panningSensibility = 150; // Reduced panning speed (higher number = slower)
+        camera.angularSensibilityX = 2000; // Increased rotation speed (lower number = faster)
+        camera.angularSensibilityY = 2000;
+        camera.useNaturalPinchZoom = true;
+        camera.pinchToPanMaxDistance = 50;
+        camera.inertia = 0.5; // Reduced inertia for more controlled movement
+
+        const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
+        hemiLight.intensity = 1.2;
+        hemiLight.diffuse = new BABYLON.Color3(1, 1, 1);
+        hemiLight.specular = new BABYLON.Color3(0.7, 0.7, 0.7);
+        hemiLight.groundColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+
+        const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-0.5, -1, -0.5), scene);
+        dirLight.position = new BABYLON.Vector3(5, 10, 5);
+        dirLight.intensity = 1.5;
+        dirLight.shadowEnabled = false;
+
+        const pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 5, -5), scene);
+        pointLight.intensity = 0.6;
+        pointLight.diffuse = new BABYLON.Color3(1, 1, 1);
+
+        BABYLON.SceneLoader.Append("", "LagoCalimaCelsiafinal.glb", scene, function (scene) {
+          scene.meshes.forEach(mesh => {
+            if (!mesh.parent) {
+              mesh.scaling = new BABYLON.Vector3(-0.01, 0.01, 0.01);
+            }
+          });
+
+          if (scene.meshes.length > 0) {
+            let boundingInfo = scene.meshes[0].getBoundingInfo();
+            let center = boundingInfo.boundingBox.centerWorld;
+            scene.activeCamera.setTarget(center);
+            
+            // Set initial camera position based on screen size
+            const isMobile = window.innerWidth < 768;
+            scene.activeCamera.radius = isMobile ? 50 : 30;
+            scene.activeCamera.alpha = Math.PI / 3; // Adjust horizontal angle
+            scene.activeCamera.beta = Math.PI / 3;  // Adjust vertical angle
+          }
+
+          loadingOverlay.style.opacity = '0';
+          setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+          }, 500);
+        });
+
+        return scene;
+      };
+
+      const scene = createScene();
+
+      engine.runRenderLoop(function () {
+        scene.render();
+      });
+
+      window.addEventListener('resize', function () {
+        engine.resize();
+      });
+    });
+  </script>
+</body>
+</html>
